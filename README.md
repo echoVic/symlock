@@ -17,7 +17,9 @@ the fix isn't a one-line patch but a re-do of one agent's work.
 **symbol** (function / class / method) they're about to edit and acquire a
 symbol-level lock. If another agent already holds an overlapping region, the
 claim fails loudly with a structured warning — so work gets redirected before a
-single wasted token.
+single wasted token. And when two agents *do* land in the same file, `symlock
+merge` combines their work with a conservative, symbol-aware 3-way merge that
+[git can't do](#semantic-merge).
 
 ```
 $ symlock symbols auth.ts
@@ -95,12 +97,57 @@ the behavior the skill injects.
 | `2`  | conflict — an overlapping symbol is already claimed |
 | `1`  | error (unsupported file, symbol not found, no `.symlock`, …) |
 
+## Semantic merge
+
+Prevention is the first half; the second is merging cleanly when two agents
+*did* edit the same file. `symlock merge` does a **conservative, symbol-aware
+3-way merge**:
+
+```bash
+symlock merge --base base.ts --ours ours.ts --theirs theirs.ts -o merged.ts
+# exit 0: merged cleanly   exit 2: conflict left for a human   exit 1: error
+```
+
+Where plain `git` sees two edits on adjacent lines and gives up:
+
+```
+$ git merge-file ours.js base.js theirs.js
+git: CONFLICT
+
+$ symlock merge --base base.js --ours ours.js --theirs theirs.js
+function a(){return 111;}   # ← your change
+function b(){return 222;}   # ← their change, cleanly combined
+```
+
+**It only ever auto-merges what it can prove is safe.** The rule: try a normal
+line-level merge first; if that conflicts, accept the result *only* when the two
+sides changed **disjoint top-level symbols** and nothing outside them (imports,
+layout, sibling code). Anything else — both sides editing the same function, an
+added/removed/renamed symbol, a changed import, a parse failure, an unsupported
+language — is returned as a conflict for a human, with the reason stated. It
+re-parses its own output before trusting it. **It would rather refuse than merge
+wrong.**
+
+Drop it into git as a merge driver:
+
+```gitattributes
+# .gitattributes
+*.ts merge=symlock
+*.go merge=symlock
+```
+```
+# .git/config
+[merge "symlock"]
+  name = symlock semantic merge
+  driver = symlock merge --base %O --ours %A --theirs %B -o %A
+```
+
 ## Status
 
-**MVP — conflict prevention.** Symbol extraction (TS/JS, Python, Go, Rust), cross-process
-safe claim/release, structured conflict reports, and an Agent Skill that makes
-agents claim-before-edit. Roadmap: more languages, and AST-level
-semantic merge (conservative: auto-merge only provably non-overlapping edits).
+**Conflict prevention + semantic merge.** Symbol extraction (TS/JS, Python, Go,
+Rust), cross-process safe claim/release, an Agent Skill that makes agents
+claim-before-edit, and a conservative symbol-aware 3-way merge. Roadmap: more
+languages, richer merge coverage.
 
 ## License
 

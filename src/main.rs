@@ -1,4 +1,5 @@
 mod cli;
+mod merge;
 mod model;
 mod store;
 mod symbols;
@@ -89,5 +90,104 @@ mod tests {
         assert!(s(1, 5).overlaps(&s(5, 9))); // touch at boundary
         assert!(s(1, 10).overlaps(&s(3, 4))); // contained
         assert!(!s(1, 5).overlaps(&s(6, 9))); // disjoint
+    }
+
+    // ---- semantic merge ----
+    use crate::merge::{merge, MergeOutcome};
+    use std::path::Path;
+
+    fn ts(name: &str) -> std::path::PathBuf {
+        Path::new(name).to_path_buf()
+    }
+
+    fn assert_clean(o: MergeOutcome) -> String {
+        match o {
+            MergeOutcome::Clean(s) => s,
+            MergeOutcome::Conflict { reason, .. } => {
+                panic!("expected clean merge, got conflict: {reason}")
+            }
+        }
+    }
+
+    fn assert_conflict(o: MergeOutcome) {
+        assert!(
+            matches!(o, MergeOutcome::Conflict { .. }),
+            "expected conflict, got clean merge"
+        );
+    }
+
+    #[test]
+    fn merges_adjacent_edits_to_different_functions() {
+        // Adjacent single-line funcs => diffy conflicts => the semantic layer
+        // must recognize the edits hit disjoint symbols and combine them.
+        let base = "function a(){return 1;}\nfunction b(){return 2;}\n";
+        let ours = "function a(){return 111;}\nfunction b(){return 2;}\n";
+        let theirs = "function a(){return 1;}\nfunction b(){return 222;}\n";
+        // sanity: this input really does defeat plain diffy
+        assert!(diffy::merge(base, ours, theirs).is_err());
+        let out = assert_clean(merge(base, ours, theirs, &ts("a.js")));
+        assert!(out.contains("111"), "got: {out}");
+        assert!(out.contains("222"), "got: {out}");
+    }
+
+    #[test]
+    fn conflicts_when_both_edit_the_same_function() {
+        let base = "function f() {\n  return 1;\n}\n";
+        let ours = "function f() {\n  return 2;\n}\n";
+        let theirs = "function f() {\n  return 3;\n}\n";
+        assert_conflict(merge(base, ours, theirs, &ts("a.js")));
+    }
+
+    #[test]
+    fn conflicts_when_a_symbol_is_added_amid_adjacent_edits() {
+        // Adjacent single-line funcs force a diffy conflict → semantic layer runs;
+        // theirs also ADDS a function, so the symbol set differs → refuse to guess.
+        let base = "function a(){return 1;}\nfunction b(){return 2;}\n";
+        let ours = "function a(){return 111;}\nfunction b(){return 2;}\n";
+        let theirs =
+            "function a(){return 1;}\nfunction b(){return 222;}\nfunction c(){return 3;}\n";
+        assert_conflict(merge(base, ours, theirs, &ts("a.js")));
+    }
+
+    #[test]
+    fn non_adjacent_symbol_add_merges_cleanly_via_diffy() {
+        // A safe, non-overlapping symbol addition IS correct to auto-merge —
+        // diffy handles it and we trust that.
+        let base = "function a() {\n  return 1;\n}\n";
+        let ours = "function a() {\n  return 9;\n}\n";
+        let theirs = "function a() {\n  return 1;\n}\n\nfunction b() {\n  return 2;\n}\n";
+        let out = assert_clean(merge(base, ours, theirs, &ts("a.js")));
+        assert!(
+            out.contains("return 9") && out.contains("function b"),
+            "got: {out}"
+        );
+    }
+
+    #[test]
+    fn conflicts_when_skeleton_changes_on_both_sides() {
+        // Both sides touch the top-level import line (outside any symbol).
+        let base = "import x from 'a';\nfunction f() {\n  return 1;\n}\n";
+        let ours = "import x from 'b';\nfunction f() {\n  return 1;\n}\n";
+        let theirs = "import x from 'c';\nfunction f() {\n  return 1;\n}\n";
+        assert_conflict(merge(base, ours, theirs, &ts("a.js")));
+    }
+
+    #[test]
+    fn clean_when_diffy_already_handles_it() {
+        // Non-adjacent edits diffy merges without help.
+        let base = "function a() {\n  return 1;\n}\n\n\n\nfunction b() {\n  return 2;\n}\n";
+        let ours = "function a() {\n  return 9;\n}\n\n\n\nfunction b() {\n  return 2;\n}\n";
+        let theirs = "function a() {\n  return 1;\n}\n\n\n\nfunction b() {\n  return 8;\n}\n";
+        let out = assert_clean(merge(base, ours, theirs, &ts("a.js")));
+        assert!(out.contains("return 9") && out.contains("return 8"));
+    }
+
+    #[test]
+    fn merges_disjoint_go_methods() {
+        let base = "package m\nfunc (s *S) A() {\n\treturn\n}\nfunc (s *S) B() {\n\treturn\n}\n";
+        let ours = "package m\nfunc (s *S) A() {\n\tx()\n}\nfunc (s *S) B() {\n\treturn\n}\n";
+        let theirs = "package m\nfunc (s *S) A() {\n\treturn\n}\nfunc (s *S) B() {\n\ty()\n}\n";
+        let out = assert_clean(merge(base, ours, theirs, &ts("s.go")));
+        assert!(out.contains("x()") && out.contains("y()"), "got: {out}");
     }
 }

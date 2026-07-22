@@ -91,6 +91,20 @@ naming the holding agent and the overlapping line range.
 symlock --json claim path/to/file.ts login
 ```
 
+## Reconciling after the fact (semantic merge)
+
+If two branches/worktrees did edit the same file and you need to combine them,
+use `symlock merge` instead of hand-resolving adjacent-line conflicts:
+
+```bash
+symlock merge --base base.ts --ours ours.ts --theirs theirs.ts -o merged.ts
+```
+
+- **Exit 0** → merged cleanly (the two sides changed disjoint symbols). Use it.
+- **Exit 2** → it refused to guess (same symbol changed on both sides, or an
+  import/structure change). The output has git-style conflict markers — resolve
+  them yourself. Trust this refusal: it means the merge was **not** provably safe.
+
 ## Quick reference
 
 | command | purpose | exit codes |
@@ -100,3 +114,4 @@ symlock --json claim path/to/file.ts login
 | `symlock claim [--agent id] <file> <symbol>` | reserve a symbol | 0 ok · 2 conflict · 1 error |
 | `symlock release [--agent id] [--file f] [--symbol s]` | drop claims | 0 / 1 |
 | `symlock status` | show all active claims | 0 / 1 |
+| `symlock merge --base b --ours o --theirs t [-o out]` | conservative semantic 3-way merge | 0 clean · 2 conflict · 1 error |

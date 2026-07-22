@@ -4,6 +4,7 @@ use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use crate::merge::{merge, MergeOutcome};
 use crate::model::{Lock, Symbol};
 use crate::store::{now_ms, Store};
 use crate::symbols::{extract_symbols, Lang};
@@ -50,6 +51,22 @@ pub enum Command {
     },
     /// Show all active claims.
     Status,
+    /// Conservatively 3-way merge two versions of a file (semantic, symbol-aware).
+    /// Exit 0 = clean merge written; exit 2 = conflict left for a human.
+    Merge {
+        /// Common ancestor version.
+        #[arg(long)]
+        base: PathBuf,
+        /// One side's version.
+        #[arg(long)]
+        ours: PathBuf,
+        /// Other side's version.
+        #[arg(long)]
+        theirs: PathBuf,
+        /// Write result here instead of stdout.
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
 }
 
 /// Exit codes are part of the contract so orchestrators can branch on them.
@@ -81,6 +98,12 @@ pub fn run(cli: Cli) -> ExitCode {
         } => resolve_agent(agent.as_deref())
             .and_then(|a| cmd_release(&a, file.as_deref(), symbol.as_deref(), cli.json)),
         Command::Status => cmd_status(cli.json),
+        Command::Merge {
+            base,
+            ours,
+            theirs,
+            output,
+        } => return cmd_merge(base, ours, theirs, output.as_deref(), cli.json),
     };
 
     match result {
@@ -300,6 +323,78 @@ fn cmd_status(json: bool) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn cmd_merge(
+    base: &Path,
+    ours: &Path,
+    theirs: &Path,
+    output: Option<&Path>,
+    json: bool,
+) -> ExitCode {
+    let read =
+        |p: &Path| std::fs::read_to_string(p).with_context(|| format!("reading {}", p.display()));
+    let (b, o, t) = match (read(base), read(ours), read(theirs)) {
+        (Ok(b), Ok(o), Ok(t)) => (b, o, t),
+        (r1, r2, r3) => {
+            let e = r1.err().or(r2.err()).or(r3.err()).unwrap();
+            emit_error(&e, json);
+            return ExitCode::from(EXIT_ERROR);
+        }
+    };
+
+    // The merge picks its language from the filename; `ours` is representative.
+    match merge(&b, &o, &t, ours) {
+        MergeOutcome::Clean(text) => {
+            let write_result = match output {
+                Some(p) => {
+                    std::fs::write(p, &text).with_context(|| format!("writing {}", p.display()))
+                }
+                None => {
+                    print!("{text}");
+                    Ok(())
+                }
+            };
+            if let Err(e) = write_result {
+                emit_error(&e, json);
+                return ExitCode::from(EXIT_ERROR);
+            }
+            if json {
+                println!(
+                    "{}",
+                    serde_json::json!({ "ok": true, "merged": true, "conflict": false })
+                );
+            } else if output.is_some() {
+                eprintln!("merged cleanly");
+            }
+            ExitCode::SUCCESS
+        }
+        MergeOutcome::Conflict {
+            text: conflicted,
+            reason,
+        } => {
+            // Emit the conflict-marked text so a human (or agent) can resolve it.
+            if let Some(p) = output {
+                if let Err(e) = std::fs::write(p, &conflicted)
+                    .with_context(|| format!("writing {}", p.display()))
+                {
+                    emit_error(&e, json);
+                    return ExitCode::from(EXIT_ERROR);
+                }
+            } else {
+                print!("{conflicted}");
+            }
+            if json {
+                println!(
+                    "{}",
+                    serde_json::json!({ "ok": false, "merged": false, "conflict": true, "reason": reason })
+                );
+            } else {
+                eprintln!("CONFLICT: could not prove a safe merge ({reason}) — left conflict markers for a human");
+            }
+            ExitCode::from(EXIT_CONFLICT)
+        }
+    }
 }
 
 fn ranges_overlap(a_start: usize, a_end: usize, b_start: usize, b_end: usize) -> bool {

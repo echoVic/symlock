@@ -1,6 +1,6 @@
 [package]
 name = "symlock"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "Symbol-level locking and conflict prevention for parallel AI coding agents. Language-agnostic, drop-in, actually open source."
 license = "Apache-2.0"
@@ -26,6 +26,7 @@ tree-sitter-typescript = "0.21"
 tree-sitter-python = "0.21"
 tree-sitter-go = "0.21"
 tree-sitter-rust = "0.21"
+diffy = "0.5.1"
 
 [profile.release]
 strip = true
