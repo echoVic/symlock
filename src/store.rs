@@ -25,8 +25,19 @@ impl Store {
         Ok(dir)
     }
 
-    /// Locate the nearest `.symlock` directory walking up from `start`.
+    /// Locate the `.symlock` directory.
+    ///
+    /// `$SYMLOCK_DIR` takes precedence when set — this is how agents in separate
+    /// git worktrees (which are independent directory trees) share one lock file:
+    /// point them all at the same directory. Otherwise we walk up from `start`.
     pub fn discover(start: &Path) -> Result<Store> {
+        if let Ok(dir) = std::env::var("SYMLOCK_DIR") {
+            let dir = PathBuf::from(dir);
+            if dir.is_dir() {
+                return Ok(Store { dir });
+            }
+            anyhow::bail!("$SYMLOCK_DIR={} is not a directory", dir.display());
+        }
         let mut cur = Some(start);
         while let Some(dir) = cur {
             let candidate = dir.join(".symlock");

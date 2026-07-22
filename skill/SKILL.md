@@ -32,6 +32,10 @@ conflicts, release when done.
   one agent needs to init).
 - Identify yourself: set an agent id via `export SYMLOCK_AGENT=<your-id>` (e.g.
   your worktree/branch name). Then you can omit `--agent` on every call.
+- **Working in a git worktree?** Worktrees are separate directory trees, so they
+  won't find the main checkout's `.symlock`. Point every agent at one shared
+  store: `export SYMLOCK_DIR=/path/to/main/repo/.symlock`. This is what makes
+  claims visible across worktrees.
 
 ## The workflow — follow this order every time you edit code
 

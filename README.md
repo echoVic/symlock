@@ -32,8 +32,20 @@ CONFLICT: login (L1-3) overlaps an active claim:
 
 - **Actually open source** — Apache-2.0, no "source-available / free for ≤20 people" asterisk.
 - **Language-agnostic** — symbol boundaries come from [tree-sitter](https://tree-sitter.github.io/), not regex. TS/JS + Python today; Go/Rust next.
-- **Composable, not a walled garden** — a single binary + JSON output. Any orchestrator (Claude Squad, cmux, Vibe Kanban, or your own) can shell out to it or drive it over the planned MCP server. symlock is the missing *infrastructure*, not another dashboard.
+- **Composable, not a walled garden** — a single binary + JSON output. Any orchestrator (Claude Squad, cmux, Vibe Kanban, or your own) can shell out to it, and coding agents drive it via the bundled [Agent Skill](skill/SKILL.md) — no MCP handshake, no daemon. symlock is the missing *infrastructure*, not another dashboard.
 - **Conservative by design** — it locks reviewable, nameable regions and warns on any overlap. It never silently merges anything (semantic AST merge is the next milestone, and will stay conservative: auto-merge only provably non-overlapping edits, everything else goes to a human).
+
+## Demo
+
+See it end-to-end — two agents, two git worktrees, one shared repo:
+
+```bash
+./demo.sh
+```
+
+It builds the binary, spins up a throwaway repo with two worktrees sharing one
+lock store, and shows two agents claiming different functions (both succeed)
+then colliding on the same one (blocked with exit 2, before any edit).
 
 ## Install
 
