@@ -6,6 +6,8 @@
 **Symbol-level locking & conflict prevention for parallel AI coding agents.**
 Language-agnostic. Drop-in. Actually open source (Apache-2.0).
 
+![symlock demo](assets/demo.svg)
+
 When you run N coding agents (Claude Code, Codex, Gemini CLI, …) in parallel git
 worktrees, worktrees keep them from *overwriting* each other — but nothing stops
 two agents from editing the **same function** and colliding at merge time, where
