@@ -47,7 +47,7 @@ jobs:
           dist="symlock-${{ matrix.target }}"
           mkdir "$dist"
           cp "$bin" README.md LICENSE "$dist"/
-          cp -r skill "$dist"/
+          cp -r skills "$dist"/
           tar -czf "$dist.tar.gz" "$dist"
 
       - name: Upload to release

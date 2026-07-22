@@ -35,7 +35,7 @@ CONFLICT: login (L1-3) overlaps an active claim:
 
 - **Actually open source** — Apache-2.0, no "source-available / free for ≤20 people" asterisk.
 - **Language-agnostic** — symbol boundaries come from [tree-sitter](https://tree-sitter.github.io/), not regex. TS/JS + Python today; Go/Rust next.
-- **Composable, not a walled garden** — a single binary + JSON output. Any orchestrator (Claude Squad, cmux, Vibe Kanban, or your own) can shell out to it, and coding agents drive it via the bundled [Agent Skill](skill/SKILL.md) — no MCP handshake, no daemon. symlock is the missing *infrastructure*, not another dashboard.
+- **Composable, not a walled garden** — a single binary + JSON output. Any orchestrator (Claude Squad, cmux, Vibe Kanban, or your own) can shell out to it, and coding agents drive it via the bundled [Agent Skill](skills/symlock/SKILL.md) — no MCP handshake, no daemon. symlock is the missing *infrastructure*, not another dashboard.
 - **Conservative by design** — it locks reviewable, nameable regions and warns on any overlap. It never silently merges anything (semantic AST merge is the next milestone, and will stay conservative: auto-merge only provably non-overlapping edits, everything else goes to a human).
 
 ## Demo
@@ -72,11 +72,18 @@ sets its identity once per worktree).
 
 ### Use it from an AI coding agent (skill)
 
-[`skill/SKILL.md`](skill/SKILL.md) is a drop-in [Agent Skill](https://agentskills.io/)
-that teaches Claude Code / Codex / Cursor / OpenCode to **claim before they
-edit** and back off on conflict. This is the intended way to wire symlock into a
+symlock ships an [Agent Skill](https://agentskills.io/) that teaches Claude Code
+/ Codex / Cursor / OpenCode to **claim before they edit** and back off on
+conflict. Install it with the [skills](https://www.skills.sh/) CLI:
+
+```bash
+npx skills add echoVic/symlock
+```
+
+Or copy [`skills/symlock/SKILL.md`](skills/symlock/SKILL.md) into your agent's
+skills directory by hand. This is the intended way to wire symlock into a
 parallel-agent workflow — no MCP handshake, no daemon, just a CLI on PATH plus
-the behavior the skill injects. Install it into your agent's skills directory.
+the behavior the skill injects.
 
 ### Exit codes (part of the contract)
 

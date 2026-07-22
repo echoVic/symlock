@@ -25,8 +25,10 @@ conflicts, release when done.
 
 ## Prerequisites (check once)
 
-- Binary on PATH: run `symlock --version`. If missing, build from the symlock
-  repo with `cargo build --release` and use `target/release/symlock`.
+- Binary on PATH: run `symlock --version`. If missing, install it:
+  `cargo install --git https://github.com/echoVic/symlock` (or grab a prebuilt
+  binary from the repo's Releases page, or build from source with
+  `cargo build --release` and use `target/release/symlock`).
 - Store exists: `symlock status` should succeed. If it errors with "no .symlock
   directory", run `symlock init` at the repo root **once** (coordinate — only
   one agent needs to init).
