@@ -52,6 +52,32 @@ mod tests {
     }
 
     #[test]
+    fn extracts_go_functions_types_and_methods() {
+        let src = "package main\n\nfunc Add(a, b int) int {\n\treturn a + b\n}\n\n\
+                   type Server struct{}\n\nfunc (s *Server) Start() {}\n\nfunc (s Server) Stop() {}\n";
+        let syms = extract_symbols(Lang::Go, src).unwrap();
+        let names: Vec<_> = syms.iter().map(|s| s.name.as_str()).collect();
+        assert!(names.contains(&"Add"), "got {names:?}");
+        assert!(names.contains(&"Server"), "got {names:?}");
+        // Methods qualified by receiver type (pointer and value receivers alike).
+        assert!(names.contains(&"Server.Start"), "got {names:?}");
+        assert!(names.contains(&"Server.Stop"), "got {names:?}");
+    }
+
+    #[test]
+    fn extracts_rust_functions_structs_and_impl_methods() {
+        let src = "pub fn add(a: i32) -> i32 {\n    a\n}\n\nstruct S;\n\n\
+                   impl S {\n    fn m(&self) {}\n    pub fn n(&self) {}\n}\n\ntrait T {\n    fn f(&self);\n}\n";
+        let syms = extract_symbols(Lang::Rust, src).unwrap();
+        let names: Vec<_> = syms.iter().map(|s| s.name.as_str()).collect();
+        assert!(names.contains(&"add"), "got {names:?}");
+        assert!(names.contains(&"S"), "got {names:?}");
+        assert!(names.contains(&"S.m"), "got {names:?}");
+        assert!(names.contains(&"S.n"), "got {names:?}");
+        assert!(names.contains(&"T"), "got {names:?}");
+    }
+
+    #[test]
     fn overlap_detection_is_symmetric_and_correct() {
         use crate::model::Symbol;
         let s = |a, b| Symbol {

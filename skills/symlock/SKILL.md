@@ -78,7 +78,7 @@ conflicts, release when done.
   class does lock all its methods — only do that if you're rewriting the class.)
 - **Release promptly** so you don't block others longer than needed.
 - **Unsupported files** (exit 1 "unsupported file type"): symlock only parses
-  TS/JS/Python today. For other files, fall back to coordinating at file
+  TS/JS, Python, Go, and Rust today. For other files, fall back to coordinating at file
   granularity with the user / orchestrator; do not assume it's safe.
 
 ## Machine-readable mode

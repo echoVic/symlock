@@ -36,7 +36,7 @@ CONFLICT: login (L1-3) overlaps an active claim:
 ## Why symlock (vs. the alternatives)
 
 - **Actually open source** — Apache-2.0, no "source-available / free for ≤20 people" asterisk.
-- **Language-agnostic** — symbol boundaries come from [tree-sitter](https://tree-sitter.github.io/), not regex. TS/JS + Python today; Go/Rust next.
+- **Language-agnostic** — symbol boundaries come from [tree-sitter](https://tree-sitter.github.io/), not regex. TypeScript/JavaScript, Python, Go, and Rust today; more via tree-sitter grammars.
 - **Composable, not a walled garden** — a single binary + JSON output. Any orchestrator (Claude Squad, cmux, Vibe Kanban, or your own) can shell out to it, and coding agents drive it via the bundled [Agent Skill](skills/symlock/SKILL.md) — no MCP handshake, no daemon. symlock is the missing *infrastructure*, not another dashboard.
 - **Conservative by design** — it locks reviewable, nameable regions and warns on any overlap. It never silently merges anything (semantic AST merge is the next milestone, and will stay conservative: auto-merge only provably non-overlapping edits, everything else goes to a human).
 
@@ -97,9 +97,9 @@ the behavior the skill injects.
 
 ## Status
 
-**MVP — conflict prevention.** Symbol extraction (TS/JS/Python), cross-process
+**MVP — conflict prevention.** Symbol extraction (TS/JS, Python, Go, Rust), cross-process
 safe claim/release, structured conflict reports, and an Agent Skill that makes
-agents claim-before-edit. Roadmap: more languages (Go/Rust), and AST-level
+agents claim-before-edit. Roadmap: more languages, and AST-level
 semantic merge (conservative: auto-merge only provably non-overlapping edits).
 
 ## License
