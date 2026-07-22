@@ -62,6 +62,9 @@ impl Store {
             .read(true)
             .write(true)
             .create(true)
+            // We truncate manually (set_len) *after* reading current state, so we
+            // must not truncate on open — that would wipe the file before we read it.
+            .truncate(false)
             .open(&path)
             .with_context(|| format!("opening {}", path.display()))?;
 

@@ -122,8 +122,8 @@ fn cmd_init(json: bool) -> Result<()> {
 fn symbols_for(file: &Path) -> Result<(Lang, Vec<Symbol>)> {
     let lang = Lang::from_path(file)
         .with_context(|| format!("unsupported file type: {}", file.display()))?;
-    let source = std::fs::read_to_string(file)
-        .with_context(|| format!("reading {}", file.display()))?;
+    let source =
+        std::fs::read_to_string(file).with_context(|| format!("reading {}", file.display()))?;
     let symbols = extract_symbols(lang, &source)?;
     Ok((lang, symbols))
 }
@@ -262,12 +262,7 @@ fn cmd_claim(agent: &str, file: &Path, symbol_name: &str, json: bool) -> ExitCod
     }
 }
 
-fn cmd_release(
-    agent: &str,
-    file: Option<&Path>,
-    symbol: Option<&str>,
-    json: bool,
-) -> Result<()> {
+fn cmd_release(agent: &str, file: Option<&Path>, symbol: Option<&str>, json: bool) -> Result<()> {
     let rel = file.map(normalize_path);
     let store = Store::discover(&std::env::current_dir()?)?;
     let removed = store.with_exclusive(|lf| {
