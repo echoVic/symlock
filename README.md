@@ -46,11 +46,22 @@ cargo install --path .   # or: cargo build --release
 ```bash
 symlock init                                   # create .symlock/ in the repo
 symlock symbols <file>                         # list lockable symbols
-symlock claim  --agent <id> <file> <symbol>    # reserve a symbol (exit 2 on conflict)
-symlock release --agent <id> [--file f] [--symbol s]
+symlock claim  [--agent <id>] <file> <symbol>  # reserve a symbol (exit 2 on conflict)
+symlock release [--agent <id>] [--file f] [--symbol s]
 symlock status                                 # show all active claims
 symlock --json <cmd>                           # machine-readable output for orchestrators
 ```
+
+`--agent` can be omitted if you export `SYMLOCK_AGENT=<id>` (handy so each agent
+sets its identity once per worktree).
+
+### Use it from an AI coding agent (skill)
+
+[`skill/SKILL.md`](skill/SKILL.md) is a drop-in [Agent Skill](https://agentskills.io/)
+that teaches Claude Code / Codex / Cursor / OpenCode to **claim before they
+edit** and back off on conflict. This is the intended way to wire symlock into a
+parallel-agent workflow — no MCP handshake, no daemon, just a CLI on PATH plus
+the behavior the skill injects. Install it into your agent's skills directory.
 
 ### Exit codes (part of the contract)
 
@@ -63,8 +74,9 @@ symlock --json <cmd>                           # machine-readable output for orc
 ## Status
 
 **MVP — conflict prevention.** Symbol extraction (TS/JS/Python), cross-process
-safe claim/release, structured conflict reports. Roadmap: more languages, an MCP
-server so agents self-declare intent, and AST-level semantic merge.
+safe claim/release, structured conflict reports, and an Agent Skill that makes
+agents claim-before-edit. Roadmap: more languages (Go/Rust), and AST-level
+semantic merge (conservative: auto-merge only provably non-overlapping edits).
 
 ## License
 

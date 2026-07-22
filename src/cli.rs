@@ -31,17 +31,18 @@ pub enum Command {
     Symbols { file: PathBuf },
     /// Claim a symbol for an agent. Fails (exit 2) if it overlaps an existing claim.
     Claim {
-        /// Agent identifier (e.g. "codex-1", "claude-auth").
+        /// Agent identifier (e.g. "codex-1"). Falls back to $SYMLOCK_AGENT.
         #[arg(long)]
-        agent: String,
+        agent: Option<String>,
         file: PathBuf,
         /// Symbol name to claim (as reported by `symbols`).
         symbol: String,
     },
     /// Release claims. Without --symbol, releases all of the agent's claims.
     Release {
+        /// Agent identifier. Falls back to $SYMLOCK_AGENT.
         #[arg(long)]
-        agent: String,
+        agent: Option<String>,
         #[arg(long)]
         file: Option<PathBuf>,
         #[arg(long)]
@@ -63,12 +64,22 @@ pub fn run(cli: Cli) -> ExitCode {
             agent,
             file,
             symbol,
-        } => return cmd_claim(agent, file, symbol, cli.json),
+        } => {
+            let agent = match resolve_agent(agent.as_deref()) {
+                Ok(a) => a,
+                Err(e) => {
+                    emit_error(&e, cli.json);
+                    return ExitCode::from(EXIT_ERROR);
+                }
+            };
+            return cmd_claim(&agent, file, symbol, cli.json);
+        }
         Command::Release {
             agent,
             file,
             symbol,
-        } => cmd_release(agent, file.as_deref(), symbol.as_deref(), cli.json),
+        } => resolve_agent(agent.as_deref())
+            .and_then(|a| cmd_release(&a, file.as_deref(), symbol.as_deref(), cli.json)),
         Command::Status => cmd_status(cli.json),
     };
 
@@ -78,6 +89,18 @@ pub fn run(cli: Cli) -> ExitCode {
             emit_error(&e, cli.json);
             ExitCode::from(EXIT_ERROR)
         }
+    }
+}
+
+/// Resolve the agent id from `--agent` or the `$SYMLOCK_AGENT` env var.
+/// Letting agents set it once in their environment keeps claim calls terse.
+fn resolve_agent(flag: Option<&str>) -> Result<String> {
+    if let Some(a) = flag {
+        return Ok(a.to_string());
+    }
+    match std::env::var("SYMLOCK_AGENT") {
+        Ok(a) if !a.trim().is_empty() => Ok(a),
+        _ => anyhow::bail!("no agent id: pass --agent <id> or set $SYMLOCK_AGENT"),
     }
 }
 
