@@ -28,3 +28,5 @@ jobs:
         run: |
           cargo build --release
           ./demo.sh
+      - name: git merge driver integration
+        run: ./tests/git-merge-driver.sh

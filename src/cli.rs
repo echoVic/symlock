@@ -66,6 +66,11 @@ pub enum Command {
         /// Write result here instead of stdout.
         #[arg(short, long)]
         output: Option<PathBuf>,
+        /// Real file path used only to pick the language. Needed when --ours is a
+        /// temp file without a meaningful extension (e.g. a git merge driver
+        /// passing %A). Defaults to --ours.
+        #[arg(long)]
+        path: Option<PathBuf>,
     },
 }
 
@@ -103,7 +108,17 @@ pub fn run(cli: Cli) -> ExitCode {
             ours,
             theirs,
             output,
-        } => return cmd_merge(base, ours, theirs, output.as_deref(), cli.json),
+            path,
+        } => {
+            return cmd_merge(
+                base,
+                ours,
+                theirs,
+                output.as_deref(),
+                path.as_deref(),
+                cli.json,
+            )
+        }
     };
 
     match result {
@@ -330,6 +345,7 @@ fn cmd_merge(
     ours: &Path,
     theirs: &Path,
     output: Option<&Path>,
+    path: Option<&Path>,
     json: bool,
 ) -> ExitCode {
     let read =
@@ -343,8 +359,10 @@ fn cmd_merge(
         }
     };
 
-    // The merge picks its language from the filename; `ours` is representative.
-    match merge(&b, &o, &t, ours) {
+    // Language is picked from --path when given (a git merge driver passes %A as
+    // a temp file with no useful extension, and %P as the real path); else --ours.
+    let lang_path = path.unwrap_or(ours);
+    match merge(&b, &o, &t, lang_path) {
         MergeOutcome::Clean(text) => {
             let write_result = match output {
                 Some(p) => {

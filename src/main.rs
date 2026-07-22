@@ -190,4 +190,40 @@ mod tests {
         let out = assert_clean(merge(base, ours, theirs, &ts("s.go")));
         assert!(out.contains("x()") && out.contains("y()"), "got: {out}");
     }
+
+    // ---- edge cases: a merge tool must be correct-or-refuse, never silently wrong ----
+
+    #[test]
+    fn preserves_absence_of_trailing_newline() {
+        let base = "function a(){return 1;}\nfunction b(){return 2;}";
+        let ours = "function a(){return 111;}\nfunction b(){return 2;}";
+        let theirs = "function a(){return 1;}\nfunction b(){return 222;}";
+        let out = assert_clean(merge(base, ours, theirs, &ts("x.js")));
+        assert!(
+            !out.ends_with('\n'),
+            "must not invent a trailing newline: {out:?}"
+        );
+        assert!(out.contains("111") && out.contains("222"));
+    }
+
+    #[test]
+    fn refuses_crlf_rather_than_rewrite_line_endings() {
+        // Semantic reconstruction joins with '\n'; silently converting a whole
+        // CRLF file to LF would be a wrong merge. Refuse instead.
+        let base = "function a(){return 1;}\r\nfunction b(){return 2;}\r\n";
+        let ours = "function a(){return 111;}\r\nfunction b(){return 2;}\r\n";
+        let theirs = "function a(){return 1;}\r\nfunction b(){return 222;}\r\n";
+        match merge(base, ours, theirs, &ts("x.js")) {
+            MergeOutcome::Conflict { text, .. } => {
+                // Falls back to the byte-preserving line-level conflict.
+                assert!(text.contains('\r'), "conflict text should keep CRLF bytes");
+            }
+            MergeOutcome::Clean(s) => panic!("CRLF must not auto-merge; got {s:?}"),
+        }
+    }
+
+    #[test]
+    fn empty_files_merge_to_empty() {
+        assert_eq!(assert_clean(merge("", "", "", &ts("x.js"))), "");
+    }
 }

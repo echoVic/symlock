@@ -43,6 +43,7 @@ pub enum Decline {
     Unsupported,
     ParseFailed,
     ReverifyFailed,
+    CarriageReturns,
 }
 
 impl Decline {
@@ -55,6 +56,9 @@ impl Decline {
             Decline::Unsupported => "unsupported language",
             Decline::ParseFailed => "parse failed",
             Decline::ReverifyFailed => "re-parsed result did not match expectations",
+            Decline::CarriageReturns => {
+                "CRLF line endings; semantic reconstruction is not byte-faithful"
+            }
         }
     }
 }
@@ -82,6 +86,13 @@ pub fn merge(base: &str, ours: &str, theirs: &str, path: &Path) -> MergeOutcome 
 /// cannot guarantee correctness.
 fn semantic_merge(base: &str, ours: &str, theirs: &str, path: &Path) -> Result<String, Decline> {
     let lang = Lang::from_path(path).ok_or(Decline::Unsupported)?;
+
+    // Our line-based reconstruction joins with '\n' and cannot faithfully
+    // reproduce '\r\n' or bare '\r'. Rather than silently rewrite every line
+    // ending in the file, refuse and let the line-level conflict stand.
+    if [base, ours, theirs].iter().any(|s| s.contains('\r')) {
+        return Err(Decline::CarriageReturns);
+    }
 
     let base_map = symbol_map(lang, base)?;
     let ours_map = symbol_map(lang, ours)?;

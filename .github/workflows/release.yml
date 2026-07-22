@@ -46,11 +46,19 @@ jobs:
           bin=target/${{ matrix.target }}/release/symlock
           dist="symlock-${{ matrix.target }}"
           mkdir "$dist"
-          cp "$bin" README.md LICENSE "$dist"/
+          cp "$bin" README.md LICENSE CHANGELOG.md "$dist"/
           cp -r skills "$dist"/
           tar -czf "$dist.tar.gz" "$dist"
+          # Checksum so downloaders can verify integrity.
+          if command -v sha256sum >/dev/null; then
+            sha256sum "$dist.tar.gz" > "$dist.tar.gz.sha256"
+          else
+            shasum -a 256 "$dist.tar.gz" > "$dist.tar.gz.sha256"
+          fi
 
       - name: Upload to release
         uses: softprops/action-gh-release@v2
         with:
-          files: symlock-${{ matrix.target }}.tar.gz
+          files: |
+            symlock-${{ matrix.target }}.tar.gz
+            symlock-${{ matrix.target }}.tar.gz.sha256

@@ -139,7 +139,7 @@ Drop it into git as a merge driver:
 # .git/config
 [merge "symlock"]
   name = symlock semantic merge
-  driver = symlock merge --base %O --ours %A --theirs %B -o %A
+  driver = symlock merge --base %O --ours %A --theirs %B -o %A --path %P
 ```
 
 ## Status
