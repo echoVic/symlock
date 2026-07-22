@@ -1,0 +1,31 @@
+[package]
+name = "symlock"
+version = "0.1.0"
+edition = "2021"
+description = "Symbol-level locking and conflict prevention for parallel AI coding agents. Language-agnostic, drop-in, actually open source."
+license = "Apache-2.0"
+repository = "https://github.com/your-org/symlock"
+readme = "README.md"
+keywords = ["ai-agents", "git", "worktree", "merge-conflict", "tree-sitter"]
+categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "symlock"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+anyhow = "1.0"
+fs4 = "0.8"
+
+tree-sitter = "0.22"
+tree-sitter-javascript = "0.21"
+tree-sitter-typescript = "0.21"
+tree-sitter-python = "0.21"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
