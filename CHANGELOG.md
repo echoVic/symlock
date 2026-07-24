@@ -5,6 +5,30 @@ All notable changes to symlock are documented here. Format loosely follows
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-07-24
+### Added
+- **Wider semantic merge coverage**, all still provably safe:
+  - A **one-sided skeleton change** (e.g. one side adds an import or a top-level
+    line) now merges with the other side's disjoint symbol-body edits, instead
+    of refusing.
+  - A **symbol added on one side** now survives a merge with the other side's
+    disjoint body edits, instead of refusing on "symbol set changed".
+- New counter-example tests locking in the refusals that keep this safe: both
+  sides changing the skeleton, both sides adding a symbol, and a structural side
+  that also edits the same symbol the other side patched.
+
+### Changed
+- Merge internals reworked around a **"structure donor"** model: the structural
+  side (or `base`) donates the file layout; the other side contributes only
+  disjoint symbol-body edits, spliced by the donor's own line ranges. The result
+  is still re-parsed and its symbol set re-verified before being trusted.
+
+### Known limitations
+- When **both** sides change the skeleton (e.g. each adds a *different* import),
+  symlock still refuses and leaves a line-level conflict. A safe union-merge of
+  additive-only skeleton changes is planned; until it can be proven correct,
+  refusing is the honest default.
+
 ## [0.3.1] — 2026-07-22
 ### Fixed
 - Semantic merge now **refuses CRLF files** instead of silently rewriting their
@@ -50,7 +74,8 @@ All notable changes to symlock are documented here. Format loosely follows
 - Agent Skill (`skills/symlock/SKILL.md`) that makes coding agents claim before
   they edit; installable via `npx skills add echoVic/symlock`.
 
-[Unreleased]: https://github.com/echoVic/symlock/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/echoVic/symlock/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/echoVic/symlock/releases/tag/v0.4.0
 [0.3.1]: https://github.com/echoVic/symlock/releases/tag/v0.3.1
 [0.3.0]: https://github.com/echoVic/symlock/releases/tag/v0.3.0
 [0.2.0]: https://github.com/echoVic/symlock/releases/tag/v0.2.0

@@ -139,13 +139,29 @@ mod tests {
     }
 
     #[test]
-    fn conflicts_when_a_symbol_is_added_amid_adjacent_edits() {
-        // Adjacent single-line funcs force a diffy conflict → semantic layer runs;
-        // theirs also ADDS a function, so the symbol set differs → refuse to guess.
+    fn merges_disjoint_edit_plus_added_symbol() {
+        // ours edits a(), theirs edits b() AND adds c(). Nobody touches the same
+        // symbol → this is a safe merge, not a conflict. (v0.4: added symbols on
+        // one side no longer force a refusal.)
         let base = "function a(){return 1;}\nfunction b(){return 2;}\n";
         let ours = "function a(){return 111;}\nfunction b(){return 2;}\n";
         let theirs =
             "function a(){return 1;}\nfunction b(){return 222;}\nfunction c(){return 3;}\n";
+        let out = assert_clean(merge(base, ours, theirs, &ts("a.js")));
+        assert!(out.contains("111"), "got: {out}");
+        assert!(out.contains("222"), "got: {out}");
+        assert!(
+            out.contains("function c"),
+            "added symbol should survive: {out}"
+        );
+    }
+
+    #[test]
+    fn conflicts_when_both_sides_add_the_same_symbol() {
+        // Both structural (each adds a symbol) → we can't prove a safe combine.
+        let base = "function a(){return 1;}\n";
+        let ours = "function a(){return 1;}\nfunction b(){return 2;}\n";
+        let theirs = "function a(){return 1;}\nfunction b(){return 999;}\n";
         assert_conflict(merge(base, ours, theirs, &ts("a.js")));
     }
 
@@ -189,6 +205,50 @@ mod tests {
         let theirs = "package m\nfunc (s *S) A() {\n\treturn\n}\nfunc (s *S) B() {\n\ty()\n}\n";
         let out = assert_clean(merge(base, ours, theirs, &ts("s.go")));
         assert!(out.contains("x()") && out.contains("y()"), "got: {out}");
+    }
+
+    // ---- v0.4: wider (still provably safe) auto-merge coverage ----
+
+    #[test]
+    fn merges_one_sided_skeleton_change_with_other_sides_body_edit() {
+        // theirs adds an import (skeleton change) while ours edits a function body.
+        // Disjoint → build on theirs (the structural side), splice ours' body edit.
+        let base = "import a from 'a';\nfunction f(){return 1;}\n";
+        let ours = "import a from 'a';\nfunction f(){return 999;}\n";
+        let theirs = "import a from 'a';\nimport b from 'b';\nfunction f(){return 1;}\n";
+        let out = assert_clean(merge(base, ours, theirs, &ts("x.js")));
+        assert!(out.contains("import b from 'b';"), "kept new import: {out}");
+        assert!(out.contains("return 999"), "kept body edit: {out}");
+    }
+
+    #[test]
+    fn one_sided_added_symbol_survives_with_other_body_edit() {
+        // ours adds a helper; theirs edits an existing function. Disjoint → merge.
+        let base = "function f(){return 1;}\n";
+        let ours = "function f(){return 1;}\nfunction helper(){return 0;}\n";
+        let theirs = "function f(){return 2;}\n";
+        let out = assert_clean(merge(base, ours, theirs, &ts("x.js")));
+        assert!(out.contains("function helper"), "kept added symbol: {out}");
+        assert!(out.contains("return 2"), "kept body edit: {out}");
+    }
+
+    #[test]
+    fn conflicts_when_both_sides_change_skeleton() {
+        // Both edit the same import line differently → both structural → refuse.
+        let base = "import x from 'a';\nfunction f(){return 1;}\n";
+        let ours = "import x from 'b';\nfunction f(){return 1;}\n";
+        let theirs = "import x from 'c';\nfunction f(){return 1;}\n";
+        assert_conflict(merge(base, ours, theirs, &ts("x.js")));
+    }
+
+    #[test]
+    fn conflicts_when_structural_side_also_changed_the_patched_symbol() {
+        // theirs is structural (adds c) AND changes f; ours also changes f.
+        // The one body edit ours contributes overlaps theirs → refuse.
+        let base = "function f(){return 1;}\n";
+        let ours = "function f(){return 111;}\n";
+        let theirs = "function f(){return 222;}\nfunction c(){return 3;}\n";
+        assert_conflict(merge(base, ours, theirs, &ts("x.js")));
     }
 
     // ---- edge cases: a merge tool must be correct-or-refuse, never silently wrong ----

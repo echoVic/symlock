@@ -98,54 +98,82 @@ fn semantic_merge(base: &str, ours: &str, theirs: &str, path: &Path) -> Result<S
     let ours_map = symbol_map(lang, ours)?;
     let theirs_map = symbol_map(lang, theirs)?;
 
-    // The set of symbol names must be identical across all three. If a side
-    // added/removed/renamed a symbol, positions shift in ways we won't reason
-    // about — bail.
-    if !same_key_set(&base_map, &ours_map) || !same_key_set(&base_map, &theirs_map) {
-        return Err(Decline::SymbolSetChanged);
-    }
-
-    // The "skeleton" is everything *outside* symbol bodies (imports, top-level
-    // statements, blank lines, layout). If both sides changed the skeleton we
-    // can't safely combine; if only one side did, that's still risky because a
-    // skeleton edit may depend on a symbol edit — require skeletons to be equal
-    // after normalizing each side's own symbol regions out.
+    // Classify each side relative to base:
+    //   body-only  = skeleton unchanged AND same symbol set (only bodies differ)
+    //   structural = added/removed/renamed a symbol, or changed the skeleton
+    //                (imports, layout, top-level statements)
     let base_skel = skeleton(base, &base_map);
-    let ours_skel = skeleton(ours, &ours_map);
-    let theirs_skel = skeleton(theirs, &theirs_map);
-    if ours_skel != base_skel || theirs_skel != base_skel {
-        return Err(Decline::SkeletonChanged);
-    }
+    let ours_body_only =
+        same_key_set(&base_map, &ours_map) && skeleton(ours, &ours_map) == base_skel;
+    let theirs_body_only =
+        same_key_set(&base_map, &theirs_map) && skeleton(theirs, &theirs_map) == base_skel;
 
-    // Which symbols did each side actually change (body text differs from base)?
-    let ours_changed = changed_symbols(&base_map, &ours_map);
-    let theirs_changed = changed_symbols(&base_map, &theirs_map);
+    // Pick the file we build on (the donor) and the edits we splice onto it.
+    // The donor supplies structure (skeleton + symbol set); the patch side
+    // supplies a set of disjoint symbol-body replacements.
+    let (donor_src, donor_map, patch_edits) = match (ours_body_only, theirs_body_only) {
+        // Both sides only touched symbol bodies: build on base, apply both.
+        (true, true) => {
+            let ours_changed = changed_symbols(&base_map, &ours_map);
+            let theirs_changed = changed_symbols(&base_map, &theirs_map);
+            // Both changing the same symbol is a real conflict.
+            if ours_changed.iter().any(|s| theirs_changed.contains(s)) {
+                return Err(Decline::OverlappingSymbols);
+            }
+            let mut edits = Vec::new();
+            for s in &ours_changed {
+                edits.push((s.clone(), ours_map[s].2.clone()));
+            }
+            for s in &theirs_changed {
+                edits.push((s.clone(), theirs_map[s].2.clone()));
+            }
+            (base, &base_map, edits)
+        }
+        // Exactly one side is structural: it donates the file, the body-only
+        // side donates its symbol-body edits.
+        (true, false) => {
+            let edits = disjoint_edits(&base_map, &ours_map, &theirs_map)?;
+            (theirs, &theirs_map, edits)
+        }
+        (false, true) => {
+            let edits = disjoint_edits(&base_map, &theirs_map, &ours_map)?;
+            (ours, &ours_map, edits)
+        }
+        // Both sides changed structure. We can't prove a safe combination.
+        (false, false) => return Err(Decline::SkeletonChanged),
+    };
 
-    // If both sides changed the same symbol, that's a real semantic conflict.
-    if ours_changed.iter().any(|s| theirs_changed.contains(s)) {
-        return Err(Decline::OverlappingSymbols);
-    }
+    let merged = apply_symbol_edits(donor_src, donor_map, &patch_edits);
 
-    // Build the merged file: start from base's symbol texts, then apply each
-    // side's changes to its own disjoint set. Because the skeleton and symbol
-    // set are identical, we can reconstruct deterministically from an ordered
-    // template of (skeleton-gap, symbol) pieces taken from base.
-    let merged = reconstruct(
-        base,
-        &base_map,
-        &ours_map,
-        &theirs_map,
-        &ours_changed,
-        &theirs_changed,
-    );
-
-    // Final guard: the result must parse and expose exactly the same symbol set.
+    // Final guard: the result must parse and expose exactly the donor's symbol
+    // set (the patch only replaced bodies, never structure).
     let merged_map = symbol_map(lang, &merged).map_err(|_| Decline::ReverifyFailed)?;
-    if !same_key_set(&base_map, &merged_map) {
+    if !same_key_set(donor_map, &merged_map) {
         return Err(Decline::ReverifyFailed);
     }
 
     Ok(merged)
+}
+
+/// Compute the body-edits the `patch` side (body-only) contributes, verified
+/// safe to splice onto the `donor` side: each edited symbol must still exist in
+/// the donor with the same name, and the donor must not have changed that
+/// symbol's body (disjointness). Returns `Err` otherwise.
+fn disjoint_edits(
+    base: &SymMap,
+    patch: &SymMap,
+    donor: &SymMap,
+) -> Result<Vec<(String, String)>, Decline> {
+    let mut edits = Vec::new();
+    for name in changed_symbols(base, patch) {
+        let donor_sym = donor.get(&name).ok_or(Decline::SymbolSetChanged)?;
+        // Donor changed the same symbol → genuine overlap.
+        if donor_sym.2 != base[&name].2 {
+            return Err(Decline::OverlappingSymbols);
+        }
+        edits.push((name.clone(), patch[&name].2.clone()));
+    }
+    Ok(edits)
 }
 
 /// Map of symbol name -> (start_line, end_line, body_text). Rejects duplicate
@@ -218,50 +246,49 @@ fn skeleton(src: &str, map: &SymMap) -> String {
         .join("\n")
 }
 
-/// Rebuild the file line by line from `base`, substituting each changed
-/// symbol's body from the side that changed it. Skeleton lines come from base
-/// (guaranteed equal to both sides). Symbol bodies keep base unless a side
-/// changed that symbol.
-fn reconstruct(
-    base: &str,
-    base_map: &SymMap,
-    ours_map: &SymMap,
-    theirs_map: &SymMap,
-    ours_changed: &[String],
-    theirs_changed: &[String],
-) -> String {
-    let base_lines: Vec<&str> = base.lines().collect();
+/// Build the merged file from the `donor` source, replacing the bodies of the
+/// symbols named in `edits` with new text. Line ranges come from `donor_map`
+/// (the donor's own layout), so donor structure — added imports, added symbols,
+/// reordering — is preserved verbatim; only the listed symbol bodies change.
+fn apply_symbol_edits(donor: &str, donor_map: &SymMap, edits: &[(String, String)]) -> String {
+    use std::collections::HashMap;
+    let replace: HashMap<&str, &str> = edits
+        .iter()
+        .map(|(n, b)| (n.as_str(), b.as_str()))
+        .collect();
 
-    // Order symbols by their start line in base so we emit them in place.
+    let donor_lines: Vec<&str> = donor.lines().collect();
+
+    // Symbols in donor order, each with its line span.
     let mut ordered: Vec<(&String, usize, usize)> =
-        base_map.iter().map(|(k, (s, e, _))| (k, *s, *e)).collect();
+        donor_map.iter().map(|(k, (s, e, _))| (k, *s, *e)).collect();
     ordered.sort_by_key(|(_, s, _)| *s);
 
     let mut out: Vec<String> = Vec::new();
     let mut line_no = 1usize; // 1-based
     let mut idx = 0;
-    while line_no <= base_lines.len() {
+    while line_no <= donor_lines.len() {
         if idx < ordered.len() && ordered[idx].1 == line_no {
             let (name, _s, e) = &ordered[idx];
-            // Choose the body: whoever changed it (sets are disjoint), else base.
-            let body = if ours_changed.contains(name) {
-                &ours_map[*name].2
-            } else if theirs_changed.contains(name) {
-                &theirs_map[*name].2
-            } else {
-                &base_map[*name].2
-            };
-            out.push(body.clone());
+            match replace.get(name.as_str()) {
+                Some(body) => out.push((*body).to_string()),
+                None => {
+                    // Keep the donor's own text for this symbol verbatim.
+                    for l in &donor_lines[line_no - 1..*e] {
+                        out.push((*l).to_string());
+                    }
+                }
+            }
             line_no = e + 1;
             idx += 1;
         } else {
-            out.push(base_lines[line_no - 1].to_string());
+            out.push(donor_lines[line_no - 1].to_string());
             line_no += 1;
         }
     }
     let mut s = out.join("\n");
-    // Preserve a trailing newline if base had one.
-    if base.ends_with('\n') {
+    // Preserve a trailing newline if the donor had one.
+    if donor.ends_with('\n') {
         s.push('\n');
     }
     s

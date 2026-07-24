@@ -121,12 +121,19 @@ function b(){return 222;}   # ← their change, cleanly combined
 
 **It only ever auto-merges what it can prove is safe.** The rule: try a normal
 line-level merge first; if that conflicts, accept the result *only* when the two
-sides changed **disjoint top-level symbols** and nothing outside them (imports,
-layout, sibling code). Anything else — both sides editing the same function, an
-added/removed/renamed symbol, a changed import, a parse failure, an unsupported
-language — is returned as a conflict for a human, with the reason stated. It
-re-parses its own output before trusting it. **It would rather refuse than merge
-wrong.**
+sides' edits are provably disjoint — they changed **different top-level symbols**,
+and any structural change (a new import, a new function) happened on just **one**
+side. So these all merge cleanly:
+
+- both sides edit different functions
+- one side edits a function while the other adds an import
+- one side edits a function while the other adds a new function
+
+Anything symlock can't prove safe is returned as a conflict for a human, with the
+reason stated: both sides editing the same function, both sides changing the
+skeleton (e.g. each adds a different import), a removed/renamed symbol, a parse
+failure, an unsupported language, or CRLF files. It re-parses its own output
+before trusting it. **It would rather refuse than merge wrong.**
 
 Drop it into git as a merge driver:
 
