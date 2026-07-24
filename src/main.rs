@@ -79,6 +79,31 @@ mod tests {
     }
 
     #[test]
+    fn rust_inherent_and_trait_impl_same_method_stay_unique() {
+        // A method defined on both an inherent impl and a trait impl for the same
+        // type must yield distinct, individually claimable symbol names — otherwise
+        // `claim S.m` would only lock one of the two regions.
+        let src = "struct S;\nimpl S {\n    fn m(&self) {}\n}\n\
+                   trait T {\n    fn m(&self);\n}\nimpl T for S {\n    fn m(&self) {}\n}\n";
+        let syms = extract_symbols(Lang::Rust, src).unwrap();
+        let names: Vec<_> = syms.iter().map(|s| s.name.as_str()).collect();
+        // inherent impl method, trait declaration method, trait-impl method
+        assert!(names.contains(&"S.m"), "got {names:?}");
+        assert!(names.contains(&"T.m"), "got {names:?}");
+        assert!(names.contains(&"S.m@T"), "got {names:?}");
+        // No duplicate claimable names.
+        let mut sorted = names.clone();
+        sorted.sort_unstable();
+        let total = sorted.len();
+        sorted.dedup();
+        assert_eq!(
+            sorted.len(),
+            total,
+            "symbol names must be unique: {names:?}"
+        );
+    }
+
+    #[test]
     fn overlap_detection_is_symmetric_and_correct() {
         use crate::model::Symbol;
         let s = |a, b| Symbol {

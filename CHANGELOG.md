@@ -5,6 +5,14 @@ All notable changes to symlock are documented here. Format loosely follows
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-07-24
+### Fixed
+- Rust: a method defined on both an inherent impl and a trait impl for the same
+  type (e.g. `S::m` and `<S as T>::m`) previously produced two identical
+  claimable symbol names (`S.m`), so `claim S.m` only locked one region and the
+  other silently lost protection. Trait-impl methods are now suffixed with the
+  trait (`S.m@T`), restoring the "every symbol is uniquely claimable" invariant.
+
 ## [0.4.0] — 2026-07-24
 ### Added
 - **Wider semantic merge coverage**, all still provably safe:
@@ -74,7 +82,8 @@ All notable changes to symlock are documented here. Format loosely follows
 - Agent Skill (`skills/symlock/SKILL.md`) that makes coding agents claim before
   they edit; installable via `npx skills add echoVic/symlock`.
 
-[Unreleased]: https://github.com/echoVic/symlock/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/echoVic/symlock/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/echoVic/symlock/releases/tag/v0.4.1
 [0.4.0]: https://github.com/echoVic/symlock/releases/tag/v0.4.0
 [0.3.1]: https://github.com/echoVic/symlock/releases/tag/v0.3.1
 [0.3.0]: https://github.com/echoVic/symlock/releases/tag/v0.3.0

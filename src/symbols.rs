@@ -115,16 +115,31 @@ fn collect_node(node: Node, src: &[u8], parent: Option<&str>, out: &mut Vec<Symb
     }
 
     // Rust: `impl_item` has no name; qualify its methods by the implemented type.
+    // A trait impl (`impl T for S`) is further suffixed with `@T` so that a
+    // method defined on both an inherent impl and a trait impl (e.g. `S.m` and
+    // `S.m@T`) stays uniquely claimable, honoring the "unique and claimable"
+    // invariant. The `@T` form also avoids colliding with the trait's own
+    // declaration (`T.m`).
     if kind == "impl_item" {
         let type_name = node
             .child_by_field_name("type")
             .and_then(|n| n.utf8_text(src).ok())
             .unwrap_or("impl")
             .to_string();
+        let trait_name = node
+            .child_by_field_name("trait")
+            .and_then(|n| n.utf8_text(src).ok());
         if let Some(body) = node.child_by_field_name("body") {
+            let start = out.len();
             let mut cursor = body.walk();
             for member in body.named_children(&mut cursor) {
                 collect_node(member, src, Some(&type_name), out);
+            }
+            // Disambiguate trait-impl members from inherent-impl ones.
+            if let Some(tr) = trait_name {
+                for sym in &mut out[start..] {
+                    sym.name = format!("{}@{tr}", sym.name);
+                }
             }
         }
         return;
